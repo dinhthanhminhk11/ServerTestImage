@@ -1,6 +1,7 @@
 # Node.js specific
 node_modules/
 BrainrotFilter/
+SpitalBetty/
 .env*
 # Logs
 logs
