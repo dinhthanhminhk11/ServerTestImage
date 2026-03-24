@@ -1,0 +1,15 @@
+{
+  "watch": [
+    "index.js",
+    "src",
+    "package.json"
+  ],
+  "ext": "js,json",
+  "ignore": [
+    "storage/**",
+    "SpitalBetty/**",
+    "deploy/**",
+    "README.md",
+    "sample-smoke.mp4"
+  ]
+}

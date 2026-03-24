@@ -1,17 +1,21 @@
 {
   "name": "serverbrainrotfilter",
   "version": "1.0.0",
-  "description": "",
+  "description": "HLS video upload, transcoding, and CDN origin server",
   "main": "index.js",
   "scripts": {
-    "start": "nodemon --exec npx babel-node index.js",
-    "dev": "nodemon index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "check": "node --check index.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "express": "^5.1.0",
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0",
+    "multer": "^2.1.1",
     "nodemon": "^3.1.10"
   },
   "devDependencies": {

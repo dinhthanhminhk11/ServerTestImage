@@ -1,15 +1,15 @@
-const express = require('express');
-const app = express();
-const port = 3000;
-const path = require('path');
-app.use(express.json());
+const { createApp } = require('./src/app');
 
-app.get('/', (req, res) => {
-  res.send('Hello, Rosita Madlife!');
-});
+async function main() {
+  const { app, config } = await createApp();
 
-app.use('/SpitalBetty', express.static(path.join(__dirname, 'SpitalBetty')));
+  app.listen(config.port, () => {
+    console.log(`HLS origin server listening on http://localhost:${config.port}`);
+  });
+}
 
-app.listen(port, () => {
-  console.log(`Server run in port http://localhost:${port}`);
+main().catch((error) => {
+  console.error('Unable to start HLS origin server.');
+  console.error(error);
+  process.exit(1);
 });
