@@ -35,6 +35,28 @@ function attachStaticVideoOrigin(app) {
   );
 }
 
+function attachStaticCatalogOrigin(app) {
+  app.use('/cdn/catalog', (req, res, next) => {
+    res.setHeader('Cache-Control', appConfig.catalogCacheControl);
+    res.setHeader('Access-Control-Allow-Origin', appConfig.corsOrigin);
+    res.setHeader('Timing-Allow-Origin', appConfig.corsOrigin);
+    next();
+  });
+
+  app.use(
+    '/cdn/catalog',
+    express.static(appConfig.storage.catalog, {
+      etag: true,
+      lastModified: true,
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.json')) {
+          res.type('application/json');
+        }
+      },
+    }),
+  );
+}
+
 async function createApp() {
   await videoModel.ensureDirectories();
 
@@ -60,6 +82,7 @@ async function createApp() {
   });
 
   app.use('/SpitalBetty', express.static(path.join(appConfig.rootDir, 'SpitalBetty')));
+  attachStaticCatalogOrigin(app);
   attachStaticVideoOrigin(app);
   app.use(errorHandler);
 

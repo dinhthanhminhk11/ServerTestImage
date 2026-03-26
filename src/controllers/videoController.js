@@ -19,10 +19,23 @@ function createVideoController({ queueService, videoService }) {
 
   async function list(req, res) {
     const records = await videoService.listVideos();
+    const catalog = videoService.serializeCatalog(records, req);
+
     res.json({
       queue: queueService.getStats(),
-      videos: records.map((record) => videoService.serializeVideo(record, req)),
+      catalog: {
+        generatedAt: catalog.generatedAt,
+        total: catalog.total,
+        path: catalog.catalogPath,
+        url: catalog.catalogUrl,
+      },
+      videos: catalog.videos,
     });
+  }
+
+  async function catalog(req, res) {
+    const records = await videoService.listVideos();
+    res.json(videoService.serializeCatalog(records, req));
   }
 
   async function detail(req, res) {
@@ -70,6 +83,7 @@ function createVideoController({ queueService, videoService }) {
   }
 
   return {
+    catalog,
     detail,
     list,
     retry,

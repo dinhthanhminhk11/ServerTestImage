@@ -48,9 +48,15 @@ src/
   - field file: `video`
   - field text tuy chon: `title`
 - `GET /api/videos`
+- `GET /api/videos/catalog`
+- `GET /api/videos/catalog.json`
 - `GET /api/videos/:videoId`
 - `GET /api/videos/:videoId/status`
 - `POST /api/videos/:videoId/retry`
+
+Server dong thoi publish file catalog tong hop tai:
+
+- `/cdn/catalog/videos.json`
 
 ## Chay local
 
@@ -71,10 +77,43 @@ curl -X POST http://localhost:3000/api/videos/upload \
 
 Khi transcode xong, response tu `GET /api/videos/:videoId` se co:
 
+- `thumbnail`
+- `thumbnailUrl`
 - `playback.masterPlaylistUrl`
 - `playback.highestPlaylistUrl`
 - `playback.sourcePlaylistUrl`
 - danh sach `renditions`
+
+Response tu `GET /api/videos/catalog` co dang:
+
+```json
+{
+  "generatedAt": "2026-03-26T08:34:56.002Z",
+  "total": 6,
+  "videos": [
+    {
+      "id": "25fbc283-684a-438b-9f33-69953a9cd4f0",
+      "title": "Video 6",
+      "thumbnail": {
+        "filename": "thumb.jpg",
+        "width": 540,
+        "height": 960,
+        "capturedAtSeconds": 1,
+        "path": "/cdn/videos/25fbc283-684a-438b-9f33-69953a9cd4f0/thumb.jpg"
+      },
+      "thumbnailUrl": "http://localhost:3000/cdn/videos/25fbc283-684a-438b-9f33-69953a9cd4f0/thumb.jpg",
+      "playback": {
+        "masterPlaylistUrl": "http://localhost:3000/cdn/videos/25fbc283-684a-438b-9f33-69953a9cd4f0/master.m3u8"
+      }
+    }
+  ]
+}
+```
+
+File `/cdn/catalog/videos.json` giu cung schema, nhung cac truong URL se o dang path tuong doi, vi du:
+
+- `thumbnailUrl: "/cdn/videos/<videoId>/thumb.jpg"`
+- `playback.masterPlaylistUrl: "/cdn/videos/<videoId>/master.m3u8"`
 
 ## Cache
 

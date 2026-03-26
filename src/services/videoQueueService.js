@@ -40,6 +40,7 @@ function createVideoQueueService({ concurrency = appConfig.transcodeConcurrency 
       ...current,
       status: 'ready',
       error: null,
+      thumbnail: result.thumbnail || current.thumbnail || null,
       video: {
         durationSeconds: result.durationSeconds,
         width: result.source.width,

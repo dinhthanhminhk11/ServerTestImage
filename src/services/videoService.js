@@ -5,24 +5,38 @@ const videoModel = require('../models/videoModel');
 const { createHttpError } = require('../utils/httpError');
 
 function createVideoService({ queueService }) {
-  function buildBaseUrl(req) {
+  function buildOriginBaseUrl(req) {
+    return `${req.protocol}://${req.get('host')}`;
+  }
+
+  function buildPlaybackRoot(req) {
     if (appConfig.publicPlaybackBaseUrl) {
       return appConfig.publicPlaybackBaseUrl.replace(/\/$/, '');
     }
 
-    return `${req.protocol}://${req.get('host')}`;
+    return `${buildOriginBaseUrl(req)}/cdn/videos`;
   }
 
   function serializeVideo(record, req) {
-    const playbackRoot = appConfig.publicPlaybackBaseUrl
-      ? appConfig.publicPlaybackBaseUrl.replace(/\/$/, '')
-      : `${buildBaseUrl(req)}/cdn/videos`;
+    const playbackRoot = buildPlaybackRoot(req);
     const highestRendition = record.renditions?.[0] || null;
     const sourceRendition = record.renditions?.find((rendition) => rendition.id === 'source') || null;
+    const thumbnail = record.thumbnail
+      ? {
+          ...record.thumbnail,
+          url: record.thumbnail.filename
+            ? `${playbackRoot}/${record.id}/${record.thumbnail.filename}`
+            : record.thumbnail.path
+              ? `${buildOriginBaseUrl(req)}${record.thumbnail.path}`
+              : null,
+        }
+      : null;
 
     return {
       id: record.id,
       title: record.title,
+      thumbnail,
+      thumbnailUrl: thumbnail?.url || thumbnail?.path || null,
       status: record.status,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
@@ -46,12 +60,25 @@ function createVideoService({ queueService }) {
     };
   }
 
+  function serializeCatalog(records, req) {
+    const videos = records.map((record) => serializeVideo(record, req));
+
+    return {
+      generatedAt: new Date().toISOString(),
+      total: videos.length,
+      catalogPath: '/cdn/catalog/videos.json',
+      catalogUrl: `${buildOriginBaseUrl(req)}/cdn/catalog/videos.json`,
+      videos,
+    };
+  }
+
   function buildVideoRecord(videoId, file, title) {
     const now = new Date().toISOString();
 
     return {
       id: videoId,
       title: title || path.parse(file.originalname).name,
+      thumbnail: null,
       status: 'uploaded',
       createdAt: now,
       updatedAt: now,
@@ -152,6 +179,7 @@ function createVideoService({ queueService }) {
     getVideoById,
     listVideos,
     retryVideo,
+    serializeCatalog,
     serializeVideo,
   };
 }

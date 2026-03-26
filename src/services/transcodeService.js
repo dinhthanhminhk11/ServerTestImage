@@ -4,6 +4,8 @@ const { spawn } = require('child_process');
 const appConfig = require('../config/appConfig');
 const videoModel = require('../models/videoModel');
 
+const THUMBNAIL_FILENAME = 'thumb.jpg';
+
 function makeEven(value) {
   const rounded = Math.max(2, Math.floor(value));
   return rounded % 2 === 0 ? rounded : rounded - 1;
@@ -250,6 +252,55 @@ async function probeSource(sourcePath) {
   };
 }
 
+function getThumbnailCaptureSecond(durationSeconds) {
+  return durationSeconds >= 1 ? 1 : 0;
+}
+
+function buildThumbnailRecord(videoId, thumbnail) {
+  return {
+    filename: thumbnail.filename,
+    width: thumbnail.width,
+    height: thumbnail.height,
+    capturedAtSeconds: thumbnail.capturedAtSeconds,
+    path: `/cdn/videos/${videoId}/${thumbnail.filename}`,
+  };
+}
+
+async function createThumbnail(sourcePath, probeResult, outputPath) {
+  const thumbnailSize = computeOutputSize(
+    probeResult.display.width,
+    probeResult.display.height,
+    540,
+    960,
+  );
+  const capturedAtSeconds = getThumbnailCaptureSecond(probeResult.durationSeconds);
+  const args = [
+    '-y',
+    '-ss',
+    String(capturedAtSeconds),
+    '-i',
+    sourcePath,
+    '-map',
+    '0:v:0',
+    '-frames:v',
+    '1',
+    '-vf',
+    `scale=${thumbnailSize.width}:${thumbnailSize.height}:flags=lanczos`,
+    '-q:v',
+    '3',
+    outputPath,
+  ];
+
+  await runProcess(appConfig.ffmpegPath, args, 'ffmpeg');
+
+  return {
+    filename: path.basename(outputPath),
+    width: thumbnailSize.width,
+    height: thumbnailSize.height,
+    capturedAtSeconds,
+  };
+}
+
 async function transcodeRendition(sourcePath, probeResult, rendition, outputDir) {
   await fs.mkdir(outputDir, { recursive: true });
 
@@ -328,6 +379,11 @@ async function transcodeVideo(videoId, options = {}) {
   const sourceWidth = probeResult.display.width;
   const sourceHeight = probeResult.display.height;
   const renditions = selectRenditions(sourceWidth, sourceHeight, probeResult);
+  const thumbnail = await createThumbnail(
+    sourcePath,
+    probeResult,
+    path.join(stagingDir, THUMBNAIL_FILENAME),
+  );
 
   for (const rendition of renditions) {
     if (typeof options.onStage === 'function') {
@@ -351,6 +407,7 @@ async function transcodeVideo(videoId, options = {}) {
       height: sourceHeight,
       rotation: probeResult.display.rotation,
     },
+    thumbnail: buildThumbnailRecord(videoId, thumbnail),
     renditions: renditions.map((rendition) => ({
       id: rendition.id,
       width: rendition.outputWidth,
@@ -363,6 +420,34 @@ async function transcodeVideo(videoId, options = {}) {
   };
 }
 
+async function ensureVideoThumbnail(videoId) {
+  const record = await videoModel.readVideoRecord(videoId);
+  if (!record?.source?.storedFilename) {
+    throw new Error(`Video ${videoId} does not have an uploaded source file.`);
+  }
+
+  const sourcePath = videoModel.getSourcePath(videoId, record.source.storedFilename);
+  if (!(await videoModel.pathExists(sourcePath))) {
+    throw new Error(`Source file for video ${videoId} was not found.`);
+  }
+
+  const publishedDir = videoModel.getPublishedOutputDir(videoId);
+  const thumbnailPath = path.join(publishedDir, THUMBNAIL_FILENAME);
+  const probeResult = await probeSource(sourcePath);
+
+  await fs.mkdir(publishedDir, { recursive: true });
+  const thumbnail = await createThumbnail(sourcePath, probeResult, thumbnailPath);
+  const thumbnailRecord = buildThumbnailRecord(videoId, thumbnail);
+
+  await videoModel.updateVideoRecord(videoId, (current) => ({
+    ...current,
+    thumbnail: thumbnailRecord,
+  }));
+
+  return thumbnailRecord;
+}
+
 module.exports = {
+  ensureVideoThumbnail,
   transcodeVideo,
 };

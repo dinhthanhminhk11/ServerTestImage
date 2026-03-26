@@ -2,6 +2,7 @@ const fs = require('fs/promises');
 const path = require('path');
 const appConfig = require('../config/appConfig');
 
+const CATALOG_INDEX_FILENAME = 'videos.json';
 const VIDEO_EXTENSIONS = {
   'video/mp4': '.mp4',
   'video/quicktime': '.mov',
@@ -13,6 +14,10 @@ const VIDEO_EXTENSIONS = {
 
 function getCatalogPath(videoId) {
   return path.join(appConfig.storage.catalog, `${videoId}.json`);
+}
+
+function getCatalogIndexPath() {
+  return path.join(appConfig.storage.catalog, CATALOG_INDEX_FILENAME);
 }
 
 function getUploadDir(videoId) {
@@ -34,6 +39,7 @@ function getStagingOutputDir(videoId) {
 async function ensureDirectories() {
   const directories = Object.values(appConfig.storage);
   await Promise.all(directories.map((directory) => fs.mkdir(directory, { recursive: true })));
+  await writeCatalogDocument();
 }
 
 async function pathExists(targetPath) {
@@ -62,6 +68,87 @@ async function readVideoRecord(videoId) {
   }
 }
 
+function sortVideoRecords(records) {
+  return [...records].sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt));
+}
+
+function serializeCatalogVideo(record) {
+  const highestRendition = record.renditions?.[0] || null;
+  const sourceRendition = record.renditions?.find((rendition) => rendition.id === 'source') || null;
+  const thumbnail = record.thumbnail
+    ? {
+        ...record.thumbnail,
+        url: record.thumbnail.path || `/cdn/videos/${record.id}/${record.thumbnail.filename}`,
+      }
+    : null;
+
+  return {
+    id: record.id,
+    title: record.title,
+    thumbnail,
+    thumbnailUrl: thumbnail?.url || thumbnail?.path || null,
+    status: record.status,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    source: record.source,
+    video: record.video || null,
+    renditions: record.renditions || [],
+    error: record.error || null,
+    processing: record.processing || null,
+    playback:
+      record.status === 'ready'
+        ? {
+            masterPlaylistUrl: `/cdn/videos/${record.id}/master.m3u8`,
+            highestPlaylistUrl: highestRendition
+              ? `/cdn/videos/${record.id}/${highestRendition.playlist}`
+              : null,
+            sourcePlaylistUrl: sourceRendition
+              ? `/cdn/videos/${record.id}/${sourceRendition.playlist}`
+              : null,
+          }
+        : null,
+  };
+}
+
+function buildCatalogDocument(records) {
+  const videos = sortVideoRecords(records);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    total: videos.length,
+    videos: videos.map(serializeCatalogVideo),
+  };
+}
+
+async function readCatalogEntries() {
+  const entries = await fs.readdir(appConfig.storage.catalog, { withFileTypes: true });
+  const records = await Promise.all(
+    entries
+      .filter(
+        (entry) =>
+          entry.isFile() && entry.name.endsWith('.json') && entry.name !== CATALOG_INDEX_FILENAME,
+      )
+      .map(async (entry) => {
+        const content = await fs.readFile(path.join(appConfig.storage.catalog, entry.name), 'utf8');
+        return JSON.parse(content);
+      }),
+  );
+
+  return sortVideoRecords(records);
+}
+
+async function writeCatalogDocument(records) {
+  const nextRecords = Array.isArray(records) ? sortVideoRecords(records) : await readCatalogEntries();
+  const catalogDocument = buildCatalogDocument(nextRecords);
+
+  await fs.writeFile(getCatalogIndexPath(), JSON.stringify(catalogDocument, null, 2), 'utf8');
+  return catalogDocument;
+}
+
+async function readCatalogDocument() {
+  return buildCatalogDocument(await readCatalogEntries());
+}
+
 async function saveVideoRecord(record) {
   const nextRecord = {
     ...record,
@@ -69,6 +156,7 @@ async function saveVideoRecord(record) {
   };
 
   await fs.writeFile(getCatalogPath(record.id), JSON.stringify(nextRecord, null, 2), 'utf8');
+  await writeCatalogDocument();
   return nextRecord;
 }
 
@@ -87,17 +175,7 @@ async function updateVideoRecord(videoId, updater) {
 }
 
 async function listVideoRecords() {
-  const entries = await fs.readdir(appConfig.storage.catalog, { withFileTypes: true });
-  const records = await Promise.all(
-    entries
-      .filter((entry) => entry.isFile() && entry.name.endsWith('.json'))
-      .map(async (entry) => {
-        const content = await fs.readFile(path.join(appConfig.storage.catalog, entry.name), 'utf8');
-        return JSON.parse(content);
-      }),
-  );
-
-  return records.sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt));
+  return readCatalogEntries();
 }
 
 function resolveVideoExtension(originalFilename, mimeType) {
@@ -137,6 +215,7 @@ async function removeFileIfExists(targetPath) {
 
 module.exports = {
   ensureDirectories,
+  getCatalogIndexPath,
   getCatalogPath,
   getUploadDir,
   getSourcePath,
@@ -145,8 +224,10 @@ module.exports = {
   listVideoRecords,
   moveIncomingFile,
   pathExists,
+  readCatalogDocument,
   readVideoRecord,
   removeFileIfExists,
   saveVideoRecord,
   updateVideoRecord,
+  writeCatalogDocument,
 };

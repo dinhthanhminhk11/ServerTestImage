@@ -131,6 +131,7 @@ const appConfig = {
   corsOrigin: process.env.CORS_ORIGIN || '*',
   publicPlaybackBaseUrl: process.env.PUBLIC_PLAYBACK_BASE_URL || '',
   longCacheControl: 'public, max-age=31536000, immutable',
+  catalogCacheControl: 'no-cache',
   ffmpegPath: process.env.FFMPEG_PATH || ffmpegStatic,
   ffprobePath: process.env.FFPROBE_PATH || ffprobeStatic.path,
   storage: {
